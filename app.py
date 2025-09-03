@@ -1,57 +1,69 @@
 import os
-from flask import Flask, render_template_string, request, send_file
-import csv
 import io
+import csv
+import json
+from flask import Flask, render_template_string, request, send_file
 from playwright.sync_api import sync_playwright
 
 app = Flask(__name__)
 
+# HTML UI
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
   <title>Google Maps Link → Coordinates</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    textarea { width: 100%; padding: 10px; }
+    button { padding: 10px 20px; margin-top: 10px; }
+    table { border-collapse: collapse; margin-top: 20px; width: 100%; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f4f4f4; }
+  </style>
 </head>
 <body>
   <h2>Paste Google Maps Short Links</h2>
   <form method="POST" action="/extract">
-    <textarea name="links" rows="6" cols="60" placeholder="Paste links here..."></textarea><br><br>
+    <textarea name="links" rows="6" placeholder="Paste Google Maps short links here..."></textarea><br>
     <button type="submit">Extract Coordinates</button>
   </form>
   {% if results %}
     <h3>Results:</h3>
-    <table border="1">
+    <table>
       <tr><th>Link</th><th>Latitude</th><th>Longitude</th></tr>
       {% for row in results %}
-      <tr><td>{{ row[0] }}</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td></tr>
+        <tr><td>{{ row[0] }}</td><td>{{ row[1] }}</td><td>{{ row[2] }}</td></tr>
       {% endfor %}
     </table>
     <form method="POST" action="/download">
       <input type="hidden" name="data" value="{{ results|tojson }}">
-      <button type="submit">Save as CSV</button>
+      <button type="submit">Download as CSV</button>
     </form>
   {% endif %}
 </body>
 </html>
 """
 
+# Extract coordinates using Playwright
 def extract_coordinates(url):
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        page.goto(url)
-        page.wait_for_timeout(3000)  # wait 3s for redirect
-        final_url = page.url
-        browser.close()
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.goto(url, timeout=15000)  # 15s timeout
+            page.wait_for_timeout(3000)    # wait 3s for redirect
+            final_url = page.url
+            browser.close()
 
-    if "/@" in final_url:
-        try:
+        if "/@" in final_url:
             coords = final_url.split("/@")[1].split("/")[0].split(",")
             return coords[0], coords[1]
-        except:
-            return None, None
-    return None, None
+        return None, None
+    except Exception as e:
+        return None, None
 
+# Routes
 @app.route("/", methods=["GET"])
 def index():
     return render_template_string(HTML_TEMPLATE)
@@ -67,7 +79,6 @@ def extract():
 
 @app.route("/download", methods=["POST"])
 def download():
-    import json
     data = json.loads(request.form["data"])
     output = io.StringIO()
     writer = csv.writer(output)
@@ -82,6 +93,7 @@ def download():
         download_name="coordinates.csv"
     )
 
+# Entry point
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8000))
+    port = int(os.environ.get("PORT", 5000))  # Railway assigns a PORT
     app.run(host="0.0.0.0", port=port)
