@@ -7,7 +7,7 @@ from playwright.sync_api import sync_playwright
 
 app = Flask(__name__)
 
-# HTML UI
+# HTML Interface
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -45,14 +45,17 @@ HTML_TEMPLATE = """
 </html>
 """
 
-# Extract coordinates using Playwright
+# Extract coordinates with Playwright
 def extract_coordinates(url):
     try:
+        # Force Playwright to use Replit's temporary path
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "/tmp/playwright"
+
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
-            page.goto(url, timeout=15000)  # 15s timeout
-            page.wait_for_timeout(3000)    # wait 3s for redirect
+            page.goto(url, timeout=20000)  # 20s timeout
+            page.wait_for_timeout(3000)    # wait for redirect
             final_url = page.url
             browser.close()
 
@@ -93,7 +96,7 @@ def download():
         download_name="coordinates.csv"
     )
 
-# Entry point
+# Run app
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Railway assigns a PORT
+    port = int(os.environ.get("PORT", 5000))  # default for Replit
     app.run(host="0.0.0.0", port=port)
